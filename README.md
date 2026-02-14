@@ -13,8 +13,6 @@ The livekit system has 4 components:
 -   Hosts rooms (similar to MS Teams rooms).
 -   Web clients and agent servers connect to the rooms hosted on livekit server.
 
-------------------------------------------------------------------------
-
 ## 2. Token Server
 
 - Issues **access tokens** for joining rooms.
@@ -29,8 +27,6 @@ The livekit system has 4 components:
     create/join a room.
 3.  Other web clients / agent servers also use **the same access token** to join the
     same room.
-
-------------------------------------------------------------------------
 
 ## 3. Agent Server
 
@@ -60,8 +56,6 @@ class SupportAgent(Agent):
         )
 ```
 
-------------------------------------------------------------------------
-
 ### Persona Switching (Handoff)
 
 - In 1 session, an agent can switch to different persona.
@@ -80,8 +74,6 @@ async def transfer_to_billing(self, ctx: RunContext):
 
 - When the function returns a new agent instance, LiveKit automatically
 transfers control to that agent.
-
-------------------------------------------------------------------------
 
 ### Session
 
@@ -110,8 +102,6 @@ async def transcriber(ctx: JobContext):
     session = AgentSession(...)
     await session.start(room=ctx.room, agent=TranscriberAgent())
 ```
-------------------------------------------------------------------------
-
 ## 5. Web Client
 
 -   Any client for human to connect to room (React clients, Gradio apps, mobile apps, etc.)
@@ -119,7 +109,6 @@ async def transcriber(ctx: JobContext):
     -   Request access token from Token Server
     -   Use token to join LiveKit room
 
-------------------------------------------------------------------------
 
 # Setup LiveKit (Locally, for dev)
 
