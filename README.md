@@ -1,5 +1,11 @@
 # LiveKit Overview
 
+The livekit system has 4 components:
+1. Livekit server
+2. Token server
+3. Agent server
+4. Web client
+
 <img width="1732" height="937" alt="image" src="https://github.com/user-attachments/assets/9d5ddfbb-2af7-476e-b79c-f5348e8f3ad4" />
 
 ## 1. LiveKit Server
