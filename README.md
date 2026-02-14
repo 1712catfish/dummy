@@ -5,7 +5,7 @@
 ## 1. LiveKit Server
 
 -   Hosts rooms (similar to MS Teams rooms).
--   Manages real-time audio/video/data connections between participants.
+-   Web clients and agent servers connect to the rooms hosted on livekit server.
 
 ------------------------------------------------------------------------
 
@@ -13,7 +13,7 @@
 
 - Issues **access tokens** for joining rooms.
 - LiveKit doesn't provide a built-in token server for production use. 
-- Need to implement your own backend server to generate access tokens, optionally integrating with authentication providers like **Auth0, Clerk, or Firebase Auth**.
+- Need to implement custom backend server to generate access tokens (often use authentication providers like **Auth0, Clerk, or Firebase Auth**).
 
 ### Flow
 
@@ -21,7 +21,7 @@
     access token.
 2.  Use that access token to connect to the **LiveKit Server** and
     create/join a room.
-3.  Other web clients / agent servers also use access tokens to join the
+3.  Other web clients / agent servers also use **the same access token** to join the
     same room.
 
 ------------------------------------------------------------------------
@@ -29,9 +29,9 @@
 ## 3. Agent Server
 
 -   A server that runs agents.
--   One server can run multiple agents.
--   You can define different personas (different agent behaviors).
-
+-   One server can run multiple sessions.
+-   1 session can have many personas, but can only run 1 persona at a time.
+  
 ### Example: Defining Personas
 
 ``` python
@@ -58,6 +58,7 @@ class SupportAgent(Agent):
 
 ### Persona Switching (Handoff)
 
+- In 1 session, an agent can switch to different persona.
 LiveKit supports **handoff** to switch from one agent persona to
 another.
 
@@ -71,12 +72,24 @@ async def transfer_to_billing(self, ctx: RunContext):
     return BillingAgent()
 ```
 
-When the function returns a new agent instance, LiveKit automatically
+- When the function returns a new agent instance, LiveKit automatically
 transfers control to that agent.
 
 ------------------------------------------------------------------------
 
 ### Session
+
+- `AgentSession` control the AI provider:
+
+```python
+session = AgentSession(
+    stt="deepgram/nova-3:multi",
+    llm="openai/gpt-4.1-mini",
+    tts="cartesia/sonic-3:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
+    vad=silero.VAD.load(),
+    turn_detection=MultilingualModel(),
+)
+```
 
 -   One Agent Server can run multiple sessions at the same time.
 
@@ -91,22 +104,18 @@ async def transcriber(ctx: JobContext):
     session = AgentSession(...)
     await session.start(room=ctx.room, agent=TranscriberAgent())
 ```
-
-
-
-
 ------------------------------------------------------------------------
 
 ## 5. Web Client
 
--   Includes React clients, Gradio apps, mobile apps, etc.
+-   Any client for human to connect to room (React clients, Gradio apps, mobile apps, etc.)
 -   Connects to rooms the same way as Agent Servers:
     -   Request access token from Token Server
     -   Use token to join LiveKit room
 
 ------------------------------------------------------------------------
 
-# LiveKit Setup (Local)
+# Setup LiveKit (Locally, for dev)
 
 ## 1. LiveKit Server
 Install livekit-server, livekit-cli
@@ -117,13 +126,18 @@ curl -sSL https://get.livekit.io | bash
 # Install livekit-cli (lk)
 curl -sSL https://get.livekit.io/cli | bash
 
-# Run server
+# Test installation
+livekit-server --version
+lk --version
+```
+
+Run server 
+```shell
 livekit-server --dev --port 8080 --bind 0.0.0.0
 ```
 
-
 ## 2. Generate Token 
-For dev mode: 
+For dev mode:
 ```shell
 lk token create \
   --api-key devkey \
@@ -197,7 +211,7 @@ if __name__ == "__main__":
     agents.cli.run_app(server)
 ```
 
-Download models and run Agent sever:
+Download models and run `agent.py`:
 ```shell
 uv run agent.py download-files
 
