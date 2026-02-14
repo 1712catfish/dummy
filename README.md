@@ -212,3 +212,186 @@ uv run agent.py download-files
 
 uv run agent.py dev
 ```
+# Agent server advanced 
+
+#### 1. Custom AI provider
+Using plugin:
+
+```python
+session = AgentSession(
+    stt=inference.STT(
+        model="assemblyai/universal-streaming", 
+        language="en"
+    ),
+    llm="openai/gpt-4.1-mini",
+    tts="cartesia/sonic-3:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
+    vad=silero.VAD.load(),
+    turn_detection=MultilingualModel(),
+)
+```
+
+To use a custom STT, LLM, or TTS provider without a plugin, we have 2 options:
+
+**Option 1**:  inherit from `tts.TTS`, `llm.LLM`, `stt.STT`. For example
+
+```python
+# Example, inhering from tts.TTS
+
+from livekit import rtc
+import httpx
+from livekit.agents import tts, llm, stt
+from typing import AsyncIterable
+
+class CustomTTS(tts.TTS):
+    """Custom Text-to-Speech provider"""
+    
+    def __init__(self, api_url: str, api_key: str, voice: str = "default"):
+        self._api_url = api_url
+        self._api_key = api_key
+        self._voice = voice
+        self._client = httpx.AsyncClient()
+    
+    def synthesize(
+        self,
+        text: str,
+    ) -> AsyncIterable[rtc.AudioFrame]:
+        """Convert text to speech audio"""
+        
+        async def _generate():
+            # Call your TTS API
+            async with self._client.stream(
+                "POST",
+                f"{self._api_url}/synthesize",
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                json={
+                    "text": text,
+                    "voice": self._voice,
+                    "sample_rate": 24000,
+                    "format": "pcm"
+                }
+            ) as response:
+                async for chunk in response.aiter_bytes(chunk_size=4800):
+                    # Convert bytes to AudioFrame
+                    frame = rtc.AudioFrame(
+                        data=chunk,
+                        sample_rate=24000,
+                        num_channels=1,
+                        samples_per_channel=len(chunk) // 2
+                    )
+                    yield frame
+        
+        return _generate()
+
+# Usage
+session = AgentSession(
+    tts=CustomTTS(
+        api_url="https://your-tts-api.com",
+        api_key="your-key",
+        voice="vietnamese-female"
+    ),
+    # ... other config
+)
+```
+
+**Option 2**: Customize `stt_node()`, `llm_node()`, `tts_node()`
+
+```python
+# Example customizing tts_node
+
+class CustomSTTAgent(Agent):
+    async def tts_node(
+            self,
+            text: AsyncIterable[str],
+            model_settings: ModelSettings
+        ) -> AsyncIterable[rtc.AudioFrame]:
+            """Override TTS node to use custom API"""
+            
+            async for text_chunk in text:
+                # Call your custom TTS API
+                async for audio_frame in self._call_tts_api(text_chunk):
+                    yield audio_frame
+        
+        async def _call_tts_api(self, text: str) -> AsyncIterable[rtc.AudioFrame]:
+            """Call external TTS API and convert to AudioFrames"""
+            pass
+            
+
+# Usage
+session = AgentSession(
+    stt="deepgram/nova-2",
+    llm="openai/gpt-4o"
+    # No TTS - handled by tts_node override
+)
+```
+
+### 2. Function calling
+```python
+class MyAgent(Agent):
+    @function_tool
+    async def get_weather(self, ctx, city):
+        return f"Weather in {city}: 32°C, sunny"
+
+```
+
+How it works:
+
+User says: "What's the weather in Hanoi?"
+LLM sees the get_weather tool and **decides** to call it
+
+**You DON'T control when tools are called.** 
+
+Can try to force the model to call tool using prompt:
+
+```python
+class WeatherAgent(Agent):
+    def __init__(self):
+        super().__init__(
+            instructions="""You are a weather assistant.
+            
+            IMPORTANT: You MUST use the get_weather tool for ANY weather question.
+            NEVER guess or make up weather information.
+            Always call get_weather before responding about weather."""
+        )
+```
+
+### 3. RAG retrieval
+Is calling complex tool
+
+```python
+class RAGAgent(Agent):
+    def __init__(self):
+        super().__init__(
+            instructions="Answer questions using the knowledge base."
+        )
+    
+    @function_tool
+    async def search_knowledge(
+        self,
+        ctx: RunContext,
+        query: str
+    ) -> str:
+        """Search the knowledge base for relevant information.
+        
+        Args:
+            query: What to search for
+        """
+        # Call your vector DB API
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://your-vectordb.com/search",
+                json={
+                    "query": query,
+                    "top_k": 3
+                }
+            )
+            results = response.json()
+            
+            # Format results
+            context = "\n\n".join([
+                f"Document {i+1}: {doc['text']}"
+                for i, doc in enumerate(results['documents'])
+            ])
+            
+            return context
+```
+
